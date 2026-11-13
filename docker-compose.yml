@@ -1,0 +1,45 @@
+# VPN browser with its OWN NordVPN connection.
+# It is completely separate from nordvpn_gateway_jp (the VPN Claude runs through),
+# so starting/stopping this never affects that VPN or the Claude session.
+#
+# Open in your normal browser:  https://localhost:3011
+# Want another port? Change only the LEFT number in "127.0.0.1:3011:3001".
+services:
+  vpn:
+    image: qmcgaw/gluetun:latest
+    container_name: nordvpn_browser_sg
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: 1
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      VPN_SERVICE_PROVIDER: nordvpn
+      VPN_TYPE: openvpn
+      OPENVPN_USER: ${NORDVPN_USER:?Set NORDVPN_USER in .env}
+      OPENVPN_PASSWORD: ${NORDVPN_PASS:?Set NORDVPN_PASS in .env}
+      SERVER_COUNTRIES: Singapore   # or: United Kingdom
+      DOT: "off"
+      DNS_ADDRESS: 1.1.1.1
+      FIREWALL_INPUT_PORTS: 3001    # browser UI inside the VPN network
+    ports:
+      - "127.0.0.1:3011:3001"       # https://localhost:3011
+    restart: unless-stopped
+
+  browser:
+    image: lscr.io/linuxserver/chromium:latest
+    container_name: vpn_browser_sg
+    network_mode: "service:vpn"     # all traffic goes through this VPN only
+    depends_on:
+      - vpn
+    security_opt:
+      - seccomp:unconfined          # Chromium needs this inside Docker
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: Asia/Singapore
+    shm_size: "1gb"
+    volumes:
+      - ./chromium-profile:/config       # profile: bookmarks, logins, tabs. Keep this folder.
+    restart: unless-stopped
